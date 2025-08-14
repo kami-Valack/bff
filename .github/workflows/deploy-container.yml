@@ -5,13 +5,13 @@ on:
     branches:
       - staging
       - main
+
 permissions:
   id-token: write
   contents: read
 
-
 jobs:
-  build-and-push-image:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
@@ -24,7 +24,6 @@ jobs:
           client-id: "e94f2756-2b23-4d3b-9796-3c3bd783aa07"
           tenant-id: "cca1305c-6b52-4fa3-ada6-314052d491d8"
           subscription-id: "67d40114-c56b-4f83-afc1-00b1e780c991"
-          allow-no-subscriptions: false
           environment: azurecloud
           auth-type: SERVICE_PRINCIPAL
 
@@ -39,5 +38,39 @@ jobs:
         run: |
           docker push acrdevc760b03e.azurecr.io/bff:${{ github.sha }}
 
-      - name: Logout do Docker
-        run: docker logout acrdevc760b03e.azurecr.io
+      - name: Criar ou atualizar Azure Container App
+        run: |
+          set -e
+          APP_NAME="bff-app"
+          RG_NAME="rg-app-dev"
+          ENV_NAME="aca-env-dev"
+          IMAGE="acrdevc760b03e.azurecr.io/bff:${{ github.sha }}"
+          ACR_SERVER="acrdevc760b03e.azurecr.io"
+
+          # Variáveis de ambiente do container
+          ENV_VARS="SWAGGER_DOCS_USERNAME=backendteam SWAGGER_DOCS_PASSWORD=miraman CORS_ALLOWED_ORIGINS="
+
+          if az containerapp show --name $APP_NAME --resource-group $RG_NAME >/dev/null 2>&1; then
+            echo "🔄 Atualizando aplicação existente..."
+            az containerapp update \
+              --name $APP_NAME \
+              --resource-group $RG_NAME \
+              --image $IMAGE \
+              --set-env-vars $ENV_VARS
+          else
+            echo "🚀 Criando nova aplicação..."
+            az containerapp create \
+              --name $APP_NAME \
+              --resource-group $RG_NAME \
+              --environment $ENV_NAME \
+              --image $IMAGE \
+              --target-port 3333 \
+              --ingress external \
+              --registry-server $ACR_SERVER \
+              --set-env-vars $ENV_VARS
+          fi
+
+      - name: Mostrar URL do Container App
+        run: |
+          URL=$(az containerapp show --name bff-app --resource-group rg-app-dev --query properties.configuration.ingress.fqdn -o tsv)
+          echo "🌍 URL da aplicação: https://$URL"
