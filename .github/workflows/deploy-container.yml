@@ -56,7 +56,7 @@ jobs:
               --name $APP_NAME \
               --resource-group $RG_NAME \
               --image $IMAGE \
-              --set-env-vars $ENV_VARS
+              --env-vars $ENV_VARS
           else
             echo "🚀 Criando nova aplicação..."
             az containerapp create \
