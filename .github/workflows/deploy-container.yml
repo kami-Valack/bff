@@ -1,32 +1,39 @@
-name: Build and Push to Azure Container Registry
+name: build-and-push
 
 on:
   push:
     branches:
-      - main
       - staging
-      - development
+      - main
 
 jobs:
-  build-and-push:
+  build-and-push-image:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout código
         uses: actions/checkout@v4
 
-      - name: Azure login
-        uses: azure/login@v2
+      - name: Azure Login
+        uses: azure/login@v1
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          allow-no-subscriptions: false
+          environment: azurecloud
+          auth-type: SERVICE_PRINCIPAL
 
-      - name: Build and push Docker image
-        uses: azure/docker-login@v1
-        with:
-          login-server: acrdevc760b03e.azurecr.io
-          username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
+      - name: Login no Azure Container Registry
+        run: az acr login --name acrdevc760b03e
 
-      - run: |
+      - name: Build da imagem Docker
+        run: |
           docker build -t acrdevc760b03e.azurecr.io/bff:${{ github.sha }} .
+
+      - name: Push da imagem para o ACR
+        run: |
           docker push acrdevc760b03e.azurecr.io/bff:${{ github.sha }}
+
+      - name: Logout do Docker
+        run: docker logout acrdevc760b03e.azurecr.io
