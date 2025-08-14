@@ -67,7 +67,7 @@ jobs:
               --target-port 3333 \
               --ingress external \
               --registry-server $ACR_SERVER \
-              --set-env-vars $ENV_VARS
+              --env-vars $ENV_VARS
           fi
 
       - name: Mostrar URL do Container App
