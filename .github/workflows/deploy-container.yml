@@ -20,11 +20,7 @@ jobs:
 
       - name: Azure Login
         uses: azure/login@v1
-        with:
-         client-id: "e94f2756-2b23-4d3b-9796-3c3bd783aa07"
-         tenant-id: "cca1305c-6b52-4fa3-ada6-314052d491d8"
-         subscription-id: "67d40114-c56b-4f83-afc1-00b1e780c991"
-         auth-type: SERVICE_PRINCIPAL
+
 
       - name: Login no Azure Container Registry
         run: az acr login --name acrdevc760b03e
