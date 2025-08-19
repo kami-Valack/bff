@@ -7,6 +7,10 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  id-token: write
+  contents: read
+
 env:
   ACR_NAME: acr67d40114dev
   ACR_LOGIN_SERVER: acr67d40114dev.azurecr.io
