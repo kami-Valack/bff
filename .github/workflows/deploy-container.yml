@@ -69,6 +69,7 @@ jobs:
           --image ${{ env.ACR_LOGIN_SERVER }}/${{ env.APP_NAME }}:${{ env.IMAGE_TAG }} \
           --target-port 3333 \
           --ingress external \
+          --exposed-port 3333 \
           --registry-server ${{ env.ACR_LOGIN_SERVER }} \
           --registry-username $(az acr credential show --name ${{ env.ACR_NAME }} --query username -o tsv) \
           --registry-password $(az acr credential show --name ${{ env.ACR_NAME }} --query passwords[0].value -o tsv) \
