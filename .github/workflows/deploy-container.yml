@@ -1,53 +1,143 @@
-name: build-and-deploy-aca
+name: Build and Deploy to Azure Container Apps
 
 on:
   push:
-    branches:
-      - staging
-      - main
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
 
-permissions:
-  id-token: write
-  contents: read
+env:
+  ACR_NAME: acr67d40114dev
+  ACR_LOGIN_SERVER: acr67d40114dev.azurecr.io
+  ACA_ENVIRONMENT: aca-env-67d40114-dev
+  RESOURCE_GROUP: rg-core-dev
+  APP_NAME: bff
+  IMAGE_TAG: ${{ github.sha }}
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-
+    
     steps:
-      - name: Checkout código
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Azure Login
-        uses: azure/login@v1
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
 
+    - name: Log in to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Login no Azure Container Registry
-        run: az acr login --name acrdevc760b03e
+    - name: Log in to Azure Container Registry
+      uses: azure/docker-login@v1
+      with:
+        login-server: ${{ env.ACR_LOGIN_SERVER }}
+        username: ${{ secrets.ACR_USERNAME }}
+        password: ${{ secrets.ACR_PASSWORD }}
 
-      - name: Build da imagem Docker
-        run: |
-          docker build -t acrdevc760b03e.azurecr.io/bff:${{ github.sha }} .
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./bff
+        push: true
+        tags: |
+          ${{ env.ACR_LOGIN_SERVER }}/${{ env.APP_NAME }}:${{ env.IMAGE_TAG }}
+          ${{ env.ACR_LOGIN_SERVER }}/${{ env.APP_NAME }}:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
 
-      - name: Push da imagem para o ACR
-        run: |
-          docker push acrdevc760b03e.azurecr.io/bff:${{ github.sha }}
-
-      - name: Criar ou atualizar Container App
-        run: |
-          az containerapp up \
-            --name bff-app \
-            --resource-group rg-app-dev \
-            --environment aca-env-dev \
-            --image acrdevc760b03e.azurecr.io/bff:${{ github.sha }} \
+    - name: Deploy to Azure Container Apps
+      run: |
+        # Obter as credenciais do ACR
+        ACR_USERNAME=$(az acr credential show --name ${{ env.ACR_NAME }} --query "username" -o tsv)
+        ACR_PASSWORD=$(az acr credential show --name ${{ env.ACR_NAME }} --query "passwords[0].value" -o tsv)
+        
+        # Verificar se a aplicação já existe
+        if az containerapp show --name ${{ env.APP_NAME }} --resource-group ${{ env.RESOURCE_GROUP }} --query "name" -o tsv 2>/dev/null; then
+          echo "Updating existing Container App..."
+          az containerapp update \
+            --name ${{ env.APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.ACR_LOGIN_SERVER }}/${{ env.APP_NAME }}:${{ env.IMAGE_TAG }} \
+            --set-env-vars \
+              NODE_ENV=production \
+              REDIS_HOST=redis-67d40114-dev.privatelink.redis.cache.windows.net \
+              REDIS_PORT=6379 \
+              POSTGRES_HOST=postgres-67d40114-dev.postgres.database.azure.com \
+              POSTGRES_PORT=5432 \
+              POSTGRES_DB=postgres \
+              POSTGRES_USER=mirantes_user \
+              POSTGRES_PASSWORD=qwertyuiop
+        else
+          echo "Creating new Container App..."
+          az containerapp create \
+            --name ${{ env.APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --environment ${{ env.ACA_ENVIRONMENT }} \
+            --image ${{ env.ACR_LOGIN_SERVER }}/${{ env.APP_NAME }}:${{ env.IMAGE_TAG }} \
             --target-port 3333 \
             --ingress external \
-            --registry-server acrdevc760b03e.azurecr.io \
-            --registry-username $(az acr credential show --name acrdevc760b03e --query username -o tsv) \
-            --registry-password $(az acr credential show --name acrdevc760b03e --query passwords[0].value -o tsv) \
-            --env-vars SWAGGER_DOCS_USERNAME=backendteam \
-                       SWAGGER_DOCS_PASSWORD=miraman \
-                       CORS_ALLOWED_ORIGINS=""
+            --min-replicas 1 \
+            --max-replicas 3 \
+            --cpu 0.5 \
+            --memory 1Gi \
+            --set-env-vars \
+              NODE_ENV=production \
+              REDIS_HOST=redis-67d40114-dev.privatelink.redis.cache.windows.net \
+              REDIS_PORT=6379 \
+              POSTGRES_HOST=postgres-67d40114-dev.postgres.database.azure.com \
+              POSTGRES_PORT=5432 \
+              POSTGRES_DB=postgres \
+              POSTGRES_USER=mirantes_user \
+              POSTGRES_PASSWORD=qwertyuiop \
+            --registry-server ${{ env.ACR_LOGIN_SERVER }} \
+            --registry-username $ACR_USERNAME \
+            --registry-password $ACR_PASSWORD
+        fi
 
-      - name: Logout do Docker
-        run: docker logout acrdevc760b03e.azurecr.io
+    - name: Get Container App URL
+      run: |
+        APP_URL=$(az containerapp show \
+          --name ${{ env.APP_NAME }} \
+          --resource-group ${{ env.RESOURCE_GROUP }} \
+          --query "properties.configuration.ingress.fqdn" -o tsv)
+        echo "Container App URL: https://$APP_URL"
+        echo "APP_URL=https://$APP_URL" >> $GITHUB_ENV
+
+    - name: Health Check
+      run: |
+        echo "Waiting for application to be ready..."
+        sleep 30
+        
+        # Tentar health check algumas vezes
+        for i in {1..5}; do
+          if curl -f "https://${{ env.APP_URL }}/health"; then
+            echo "Health check passed!"
+            break
+          else
+            echo "Health check attempt $i failed, retrying in 10 seconds..."
+            sleep 10
+          fi
+        done
+
+    - name: Comment on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: `🚀 **Deploy concluído com sucesso!**
+            
+            **Container App:** ${{ env.APP_NAME }}
+            **URL:** ${{ env.APP_URL }}
+            **Image:** ${{ env.ACR_LOGIN_SERVER }}/${{ env.APP_NAME }}:${{ env.IMAGE_TAG }}
+            **Environment:** ${{ env.ACA_ENVIRONMENT }}
+            
+            A aplicação foi deployada e está disponível em: ${{ env.APP_URL }}`
+          })
