@@ -11,7 +11,7 @@ permissions:
   id-token: write
   contents: read
 
-env: 
+env:
   ACR_NAME: acr67d40114dev
   ACR_LOGIN_SERVER: acr67d40114dev.azurecr.io
   ACA_ENVIRONMENT: aca-env-67d40114-dev
@@ -29,6 +29,9 @@ jobs:
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
+      with:
+        driver-opts: |
+          image=moby/buildkit:v0.12.0
 
     - name: Log in to Azure
       uses: azure/login@v1
@@ -36,7 +39,6 @@ jobs:
         client-id: ${{ secrets.AZURE_CLIENT_ID }}
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        enable-AzPSSession: true   
 
     - name: Log in to Azure Container Registry
       uses: azure/docker-login@v1
