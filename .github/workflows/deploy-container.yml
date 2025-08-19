@@ -62,7 +62,7 @@ jobs:
             --name ${{ env.APP_NAME }} \
             --resource-group ${{ env.RESOURCE_GROUP }} \
             --image ${{ env.ACR_LOGIN_SERVER }}/${{ env.APP_NAME }}:${{ env.IMAGE_TAG }} \
-            --set properties.configuration.ingress.external=true \
+            --set properties.configuration.ingress.external=false \
             --set properties.configuration.ingress.targetPort=3333
         else
           echo "🆕 Criando novo Container App com acesso EXTERNO..."
@@ -72,7 +72,7 @@ jobs:
             --environment ${{ env.ACA_ENVIRONMENT }} \
             --image ${{ env.ACR_LOGIN_SERVER }}/${{ env.APP_NAME }}:${{ env.IMAGE_TAG }} \
             --target-port 3333 \
-            --ingress external \
+            --ingress internal \
             --registry-server ${{ env.ACR_LOGIN_SERVER }} \
             --registry-username $(az acr credential show --name ${{ env.ACR_NAME }} --query username -o tsv) \
             --registry-password $(az acr credential show --name ${{ env.ACR_NAME }} --query passwords[0].value -o tsv)
