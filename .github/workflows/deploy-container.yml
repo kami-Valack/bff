@@ -29,9 +29,6 @@ jobs:
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
-      with:
-        driver-opts: |
-          image=moby/buildkit:v0.12.0
 
     - name: Log in to Azure
       uses: azure/login@v1
@@ -59,19 +56,37 @@ jobs:
 
     - name: Criar ou atualizar Container App
       run: |
-        az containerapp up \
+        # Verificar se o container app existe
+        if az containerapp show --name ${{ env.APP_NAME }} --resource-group ${{ env.RESOURCE_GROUP }} --output none 2>/dev/null; then
+          echo "📦 Atualizando Container App existente..."
+          az containerapp update \
+            --name ${{ env.APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.ACR_LOGIN_SERVER }}/${{ env.APP_NAME }}:${{ env.IMAGE_TAG }} \
+            --set properties.configuration.ingress.external=false \
+            --set properties.configuration.ingress.targetPort=3333
+        else
+          echo "🆕 Criando novo Container App..."
+          az containerapp create \
+            --name ${{ env.APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --environment ${{ env.ACA_ENVIRONMENT }} \
+            --image ${{ env.ACR_LOGIN_SERVER }}/${{ env.APP_NAME }}:${{ env.IMAGE_TAG }} \
+            --target-port 3333 \
+            --ingress internal \
+            --registry-server ${{ env.ACR_LOGIN_SERVER }} \
+            --registry-username $(az acr credential show --name ${{ env.ACR_NAME }} --query username -o tsv) \
+            --registry-password $(az acr credential show --name ${{ env.ACR_NAME }} --query passwords[0].value -o tsv)
+        fi
+
+    - name: Configurar variáveis de ambiente
+      run: |
+        az containerapp update \
           --name ${{ env.APP_NAME }} \
           --resource-group ${{ env.RESOURCE_GROUP }} \
-          --environment ${{ env.ACA_ENVIRONMENT }} \
-          --image ${{ env.ACR_LOGIN_SERVER }}/${{ env.APP_NAME }}:${{ env.IMAGE_TAG }} \
-          --target-port 3333 \
-          --ingress internal \  # ← INTERNAL para VNet
-          --registry-server ${{ env.ACR_LOGIN_SERVER }} \
-          --registry-username $(az acr credential show --name ${{ env.ACR_NAME }} --query username -o tsv) \
-          --registry-password $(az acr credential show --name ${{ env.ACR_NAME }} --query passwords[0].value -o tsv) \
-          --env-vars SWAGGER_DOCS_USERNAME=backendteam \
-                     SWAGGER_DOCS_PASSWORD=miraman \
-                     CORS_ALLOWED_ORIGINS=""
+          --set-env-vars SWAGGER_DOCS_USERNAME=backendteam \
+                         SWAGGER_DOCS_PASSWORD=miraman \
+                         CORS_ALLOWED_ORIGINS=""
 
     - name: Get Container App Internal FQDN
       run: |
@@ -84,16 +99,17 @@ jobs:
 
     - name: Health Check
       run: |
-        echo "Waiting for application to be ready..."
+        echo "⏳ Aguardando aplicação ficar pronta..."
         sleep 30
         
         # Health check usando DNS interno
         for i in {1..5}; do
+          echo "🔍 Tentativa $i de health check..."
           if curl -f "http://${{ env.INTERNAL_FQDN }}:3333/health"; then
-            echo "Health check passed!"
+            echo "✅ Health check passou!"
             break
           else
-            echo "Health check attempt $i failed, retrying in 10 seconds..."
+            echo "❌ Health check falhou, tentando novamente em 10 segundos..."
             sleep 10
           fi
         done
