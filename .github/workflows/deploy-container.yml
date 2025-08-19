@@ -72,7 +72,9 @@ jobs:
           --registry-server ${{ env.ACR_LOGIN_SERVER }} \
           --registry-username $(az acr credential show --name ${{ env.ACR_NAME }} --query username -o tsv) \
           --registry-password $(az acr credential show --name ${{ env.ACR_NAME }} --query passwords[0].value -o tsv) \
-          --env-vars NODE_ENV=production,REDIS_HOST=redis-67d40114-dev.privatelink.redis.cache.windows.net,REDIS_PORT=6379,POSTGRES_HOST=postgres-67d40114-dev.postgres.database.azure.com,POSTGRES_PORT=5432,POSTGRES_DB=postgres,POSTGRES_USER=mirantes_user,POSTGRES_PASSWORD=qwertyuiop,SWAGGER_DOCS_USERNAME=backendteam,SWAGGER_DOCS_PASSWORD=miraman,CORS_ALLOWED_ORIGINS=""
+          --env-vars SWAGGER_DOCS_USERNAME=backendteam \
+                     SWAGGER_DOCS_PASSWORD=miraman \
+                     CORS_ALLOWED_ORIGINS=""
 
     - name: Get Container App URL
       run: |
