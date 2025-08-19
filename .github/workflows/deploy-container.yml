@@ -50,7 +50,7 @@ jobs:
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
       with:
-        context: ./bff
+        context: .
         push: true
         tags: |
           ${{ env.ACR_LOGIN_SERVER }}/${{ env.APP_NAME }}:${{ env.IMAGE_TAG }}
