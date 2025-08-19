@@ -11,7 +11,7 @@ permissions:
   id-token: write
   contents: read
 
-env:
+env: 
   ACR_NAME: acr67d40114dev
   ACR_LOGIN_SERVER: acr67d40114dev.azurecr.io
   ACA_ENVIRONMENT: aca-env-67d40114-dev
