@@ -54,26 +54,25 @@ jobs:
           ${{ env.ACR_LOGIN_SERVER }}/${{ env.APP_NAME }}:latest
         platforms: linux/amd64
 
-    - name: Criar ou atualizar Container App
+    - name: Criar ou atualizar Container App com acesso EXTERNO
       run: |
-        # Verificar se o container app existe
         if az containerapp show --name ${{ env.APP_NAME }} --resource-group ${{ env.RESOURCE_GROUP }} --output none 2>/dev/null; then
-          echo "📦 Atualizando Container App existente..."
+          echo "📦 Atualizando Container App para acesso EXTERNO..."
           az containerapp update \
             --name ${{ env.APP_NAME }} \
             --resource-group ${{ env.RESOURCE_GROUP }} \
             --image ${{ env.ACR_LOGIN_SERVER }}/${{ env.APP_NAME }}:${{ env.IMAGE_TAG }} \
-            --set properties.configuration.ingress.external=false \
+            --set properties.configuration.ingress.external=true \
             --set properties.configuration.ingress.targetPort=3333
         else
-          echo "🆕 Criando novo Container App..."
+          echo "🆕 Criando novo Container App com acesso EXTERNO..."
           az containerapp create \
             --name ${{ env.APP_NAME }} \
             --resource-group ${{ env.RESOURCE_GROUP }} \
             --environment ${{ env.ACA_ENVIRONMENT }} \
             --image ${{ env.ACR_LOGIN_SERVER }}/${{ env.APP_NAME }}:${{ env.IMAGE_TAG }} \
             --target-port 3333 \
-            --ingress internal \
+            --ingress external \
             --registry-server ${{ env.ACR_LOGIN_SERVER }} \
             --registry-username $(az acr credential show --name ${{ env.ACR_NAME }} --query username -o tsv) \
             --registry-password $(az acr credential show --name ${{ env.ACR_NAME }} --query passwords[0].value -o tsv)
@@ -88,28 +87,28 @@ jobs:
                          SWAGGER_DOCS_PASSWORD=miraman \
                          CORS_ALLOWED_ORIGINS=""
 
-    - name: Get Container App Internal FQDN
+    - name: Get Container App External FQDN
       run: |
-        INTERNAL_FQDN=$(az containerapp show \
+        EXTERNAL_FQDN=$(az containerapp show \
           --name ${{ env.APP_NAME }} \
           --resource-group ${{ env.RESOURCE_GROUP }} \
           --query "properties.configuration.ingress.fqdn" -o tsv)
-        echo "Container App Internal FQDN: $INTERNAL_FQDN"
-        echo "INTERNAL_FQDN=$INTERNAL_FQDN" >> $GITHUB_ENV
+        echo "Container App External FQDN: $EXTERNAL_FQDN"
+        echo "EXTERNAL_FQDN=$EXTERNAL_FQDN" >> $GITHUB_ENV
 
-    - name: Health Check
+    - name: Health Check externo
       run: |
         echo "⏳ Aguardando aplicação ficar pronta..."
         sleep 30
         
-        # Health check usando DNS interno
+        # Health check usando URL externa
         for i in {1..5}; do
-          echo "🔍 Tentativa $i de health check..."
-          if curl -f "http://${{ env.INTERNAL_FQDN }}:3333/health"; then
-            echo "✅ Health check passou!"
+          echo "🔍 Tentativa $i de health check externo..."
+          if curl -f "https://${{ env.EXTERNAL_FQDN }}/health"; then
+            echo "✅ Health check externo passou!"
             break
           else
-            echo "❌ Health check falhou, tentando novamente em 10 segundos..."
+            echo "❌ Health check externo falhou, tentando novamente em 10 segundos..."
             sleep 10
           fi
         done
@@ -126,10 +125,11 @@ jobs:
             body: `🚀 **Deploy concluído com sucesso!**
             
             **Container App:** ${{ env.APP_NAME }}
-            **Internal FQDN:** ${{ env.INTERNAL_FQDN }}
+            **External URL:** https://${{ env.EXTERNAL_FQDN }}
+            **Health Check:** https://${{ env.EXTERNAL_FQDN }}/health
             **Image:** ${{ env.ACR_LOGIN_SERVER }}/${{ env.APP_NAME }}:${{ env.IMAGE_TAG }}
             **Environment:** ${{ env.ACA_ENVIRONMENT }}
-            **Ingress:** Internal (VNet-only)
+            **Ingress:** External (Public access)
             
-            A aplicação foi deployada com acesso interno na VNet. Use o APIM para acesso externo.`
+            ✅ A aplicação está publicamente acessível e funcionando!`
           })
